@@ -12,29 +12,51 @@ const io = new Server(server, {
   },
 });
 
+const rooms = {};
+
 io.on("connection", (socket) => {
   console.log("📡 User connected:", socket.id);
 
-  socket.on("join", (room) => {
-    socket.join(room);
-    console.log(`👥 User ${socket.id} joined room ${room}`);
+  socket.on("join", (roomId) => {
+    if (!rooms[roomId]) rooms[roomId] = [];
 
-    // Broadcast to others in the room that someone joined
-    socket.to(room).emit("joined", socket.id);
+    rooms[roomId].push(socket.id);
+    socket.join(roomId);
+
+    const usersInRoom = rooms[roomId];
+    const isCaller = usersInRoom.length === 2;
+
+    console.log(
+      `👥 ${socket.id} joined room ${roomId}. Users now:`,
+      usersInRoom
+    );
+
+    if (isCaller) {
+      console.log(`📞 Sending 'ready' to first user ${usersInRoom[0]}`);
+      io.to(usersInRoom[0]).emit("ready");
+    }
+
+    socket.on("disconnect", () => {
+      rooms[roomId] = rooms[roomId].filter((id) => id !== socket.id);
+      console.log(`❌ ${socket.id} disconnected from room ${roomId}`);
+      if (rooms[roomId].length === 0) {
+        delete rooms[roomId];
+      }
+    });
   });
 
   socket.on("offer", ({ room, sdp }) => {
-    console.log(`📨 Offer from ${socket.id}`);
+    console.log(`📨 Received OFFER from ${socket.id} in room ${room}`);
     socket.to(room).emit("offer", { sdp });
   });
 
   socket.on("answer", ({ room, sdp }) => {
-    console.log(`📨 Answer from ${socket.id}`);
+    console.log(`📨 Received ANSWER from ${socket.id} in room ${room}`);
     socket.to(room).emit("answer", { sdp });
   });
 
   socket.on("ice-candidate", ({ room, candidate }) => {
-    console.log(`📨 ICE Candidate from ${socket.id}`);
+    console.log(`❄️ Received ICE candidate from ${socket.id} in room ${room}`);
     socket.to(room).emit("ice-candidate", { candidate });
   });
 
